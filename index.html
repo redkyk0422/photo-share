@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>사진 공유함</title>
+<meta name="description" content="사진을 크게 보고 원본으로 내려받는 앨범">
+<meta name="theme-color" content="#0f6e6a">
+<meta property="og:title" content="사진 공유함">
+<meta property="og:description" content="사진을 크게 보고 원본으로 내려받으세요">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="사진 공유함">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+/* 레이아웃: 앨범 제목·설명 → 동작 줄(올리기/선택/전체받기) → 사진 격자 → 크게 보기 창 */
+:root{
+  --bg:#f2f4f5; --surface:#ffffff; --fg:#151c22; --muted:#5b6974; --line:#d7dee3;
+  --accent:#0f6e6a; --accent-fg:#ffffff; --accent-soft:#dfefed; --danger:#b3261e;
+  --shade:rgba(10,14,17,.92);
+  --font-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111619; --surface:#1a2126; --fg:#e6ebee; --muted:#93a0aa; --line:#2b353c;
+  --accent:#4fb8b0; --accent-fg:#0b1a19; --accent-soft:#1c3432; --danger:#f2867e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111619; --surface:#1a2126; --fg:#e6ebee; --muted:#93a0aa; --line:#2b353c;
+  --accent:#4fb8b0; --accent-fg:#0b1a19; --accent-soft:#1c3432; --danger:#f2867e; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.6;padding:28px 16px 64px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:18px}
+
+.head{display:grid;gap:4px}
+.head h1,.head input.title{font:700 1.8rem/1.25 var(--font-body);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.head p,.head textarea{margin:0;color:var(--muted);max-width:65ch}
+.head input.title,.head textarea{background:transparent;color:inherit;border:1px dashed transparent;border-radius:8px;padding:2px 6px;margin-left:-7px;width:100%;font-family:var(--font-body);resize:none}
+.head textarea{font-size:15px;line-height:1.6;color:var(--muted)}
+.head input.title:hover,.head textarea:hover{border-color:var(--line)}
+.head input.title:focus,.head textarea:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+.stats{font-family:var(--font-mono);font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line)}
+.bar .spacer{flex:1}
+button,.btn{font:inherit;font-weight:500;font-size:.92rem;border-radius:9px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg);display:inline-flex;align-items:center;gap:6px}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+button.danger{color:var(--danger)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,.btn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.btn input{display:none}
+
+.drop{border:2px dashed var(--accent);background:var(--accent-soft);border-radius:14px;padding:28px 16px;text-align:center;display:grid;gap:4px}
+.drop strong{font-size:1.05rem}
+.drop span{color:var(--muted);font-size:.9rem}
+
+.progress{display:grid;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:.9rem}
+.progress .track{height:6px;border-radius:9px;background:var(--line);overflow:hidden}
+.progress .fill{height:100%;background:var(--accent);width:0;transition:width .2s}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+@media (max-width:480px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
+.tile{position:relative;aspect-ratio:1;max-width:100%;border-radius:10px;overflow:hidden;background:var(--line);cursor:zoom-in;border:0;padding:0;display:block;width:100%}
+.tile img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s}
+.tile:hover img{transform:scale(1.03)}
+.tile .check{position:absolute;top:8px;left:8px;width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);display:grid;place-items:center;color:#fff;font-size:15px;font-weight:700}
+.tile.sel{outline:3px solid var(--accent);outline-offset:-3px}
+.tile.sel .check{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.selecting .tile{cursor:pointer}
+
+.empty{text-align:center;color:var(--muted);padding:56px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);display:grid;gap:6px}
+.empty strong{color:var(--fg);font-size:1.1rem}
+
+.lb{position:fixed;inset:0;background:var(--shade);display:grid;grid-template-rows:auto 1fr auto;z-index:20;color:#f1f4f6;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.lb header,.lb footer{display:flex;gap:8px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+.lb header .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.lb .meta{font-family:var(--font-mono);font-size:.8rem;color:#aab6bf;flex:1}
+.lb .stage{position:relative;min-height:0;display:grid;place-items:center;padding:0 56px}
+.lb .stage img{max-width:100%;max-height:100%;object-fit:contain}
+.lb button{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.18);color:#f1f4f6}
+.lb button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.lb .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;justify-content:center;border-radius:50%;font-size:1.3rem;padding:0}
+.lb .prev{left:8px}.lb .next{right:8px}
+@media (max-width:560px){.lb .stage{padding:0 8px}.lb .nav{top:auto;bottom:8px;transform:none}}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-size:.92rem;z-index:30;max-width:calc(100% - 32px)}
+.note{color:var(--muted);font-size:.85rem;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.pending{position:absolute;bottom:6px;left:6px;right:6px;font-size:.72rem;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:2px 6px;text-align:center}
+footer.site{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line);padding-top:14px}
+.linkbtn{background:none;border:0;color:var(--muted);text-decoration:underline;padding:0;font-size:.85rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;max-width:640px}
+.panel h2{margin:0;font-size:1.05rem}
+.panel p{margin:0;color:var(--muted);font-size:.9rem}
+.panel ol{margin:0;padding-left:1.2em;color:var(--muted);font-size:.9rem}
+.panel .row{display:flex;gap:8px;flex-wrap:wrap}
+.panel input{flex:1 1 240px;min-width:0;font:inherit;font-family:var(--font-mono);font-size:.85rem;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.panel a{color:var(--accent)}
+.adminbadge{font-size:.75rem;font-weight:700;letter-spacing:.05em;color:var(--accent);background:var(--accent-soft);border-radius:99px;padding:2px 10px;justify-self:start}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="head" id="head">
+    <span class="adminbadge" id="adminBadge" hidden>관리자 모드</span>
+    <h1 id="title">사진 공유함</h1>
+    <p id="desc">사진을 눌러 크게 보고, 마음에 드는 사진을 내려받으세요.</p>
+    <div class="stats" id="stats">사진을 불러오는 중…</div>
+  </div>
+
+  <div class="panel" id="adminPanel" hidden>
+    <h2>사진 올리기 설정</h2>
+    <p>사진을 올리고 지우려면 이 앨범 저장소의 GitHub 열쇠(토큰)가 필요해요. 이 기기에만 저장되고 방문자에게는 보이지 않아요.</p>
+    <ol>
+      <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 토큰 만들기</a> 페이지를 엽니다.</li>
+      <li>Repository access에서 <b>Only select repositories</b> → <b id="repoName">photo-share</b>를 고릅니다.</li>
+      <li>Permissions → Repository permissions → <b>Contents</b>를 <b>Read and write</b>로 바꾸고 만듭니다.</li>
+      <li>만들어진 토큰을 아래에 붙여넣으세요.</li>
+    </ol>
+    <div class="row">
+      <input type="password" id="tokenIn" placeholder="github_pat_로 시작하는 토큰" autocomplete="off">
+      <button class="primary" id="tokenSave">확인</button>
+      <button id="tokenCancel">닫기</button>
+    </div>
+    <p id="tokenMsg"></p>
+  </div>
+
+  <div class="bar" id="bar">
+    <label class="btn primary" id="uploadBtn" hidden>
+      <input type="file" id="file" accept="image/*,.heic,.heif" multiple>사진 올리기
+    </label>
+    <button id="selectBtn" disabled>여러 장 고르기</button>
+    <button id="selAll" hidden>모두 고르기</button>
+    <button class="danger" id="delSel" hidden>선택 삭제</button>
+    <span class="spacer"></span>
+    <button class="primary" id="dlSel" hidden>고른 사진 받기</button>
+    <button class="primary" id="dlAll" disabled>전체 받기</button>
+  </div>
+
+  <div class="drop" id="drop" hidden>
+    <strong>여기에 사진을 끌어다 놓으세요</strong>
+    <span>여러 장을 한 번에 올릴 수 있어요</span>
+  </div>
+
+  <div class="progress" id="progress" hidden>
+    <div id="progText">준비 중…</div>
+    <div class="track"><div class="fill" id="progFill"></div></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="note" id="note"></p>
+
+  <footer class="site">
+    <span id="installHint">휴대폰 홈 화면에 추가하면 앱처럼 쓸 수 있어요.</span>
+    <span><button class="primary" id="install" hidden>앱 설치</button> <button class="linkbtn" id="adminLink">관리</button></span>
+  </footer>
+</div>
+
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="사진 크게 보기">
+  <header><span class="name" id="lbName"></span><button id="lbClose" aria-label="닫기">닫기 ✕</button></header>
+  <div class="stage">
+    <button class="nav prev" id="lbPrev" aria-label="이전 사진">‹</button>
+    <img id="lbImg" alt="">
+    <button class="nav next" id="lbNext" aria-label="다음 사진">›</button>
+  </div>
+  <footer><span class="meta" id="lbMeta"></span><button class="danger" id="lbDel" hidden>삭제</button><button class="primary" id="lbDl">이 사진 받기</button></footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script src="jszip.min.js"></script>
+<script>
+const CFG = window.APP_CONFIG;
+const $ = s => document.querySelector(s);
+const state = { title:'', desc:'', photos:[], selecting:false, sel:new Set(), lbIndex:-1, admin:false, local:{} };
+const TOKEN_KEY = 'photo-share-token';
+const store = { get(){ try{ return localStorage.getItem(TOKEN_KEY); }catch{ return null; } },
+                set(v){ try{ v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); }catch{} } };
+
+const kb = n => n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB';
+let tTimer;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(tTimer); tTimer=setTimeout(()=>t.hidden=true,2800); }
+function progress(text, frac){
+  const p=$('#progress'); if (text == null){ p.hidden=true; return; }
+  p.hidden=false; $('#progText').textContent=text; $('#progFill').style.width=Math.round((frac||0)*100)+'%';
+}
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const srcFull  = p => state.local[p.id]?.full  || p.file;
+const srcThumb = p => state.local[p.id]?.thumb || p.thumb;
+
+/* ---------- 사진 목록 ---------- */
+function applyData(d){
+  state.title = d.title || '사진 공유함'; state.desc = d.desc || '';
+  state.photos = (d.photos || []).slice().sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||''));
+  for (const id of [...state.sel]) if (!state.photos.some(p=>p.id===id)) state.sel.delete(id);
+  render(); if (state.lbIndex >= 0) showLb();
+}
+async function loadPublic(){
+  try{
+    const r = await fetch('photos.json?t=' + Date.now(), {cache:'no-store'});
+    applyData(await r.json());
+  }catch{ $('#stats').textContent = '사진 목록을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'; }
+}
+
+/* ---------- 화면 ---------- */
+function render(){
+  const g=$('#grid'), n=state.photos.length;
+  document.body.classList.toggle('selecting', state.selecting);
+  const t=$('#title'), d=$('#desc');
+  if (t.tagName==='INPUT'){ if(document.activeElement!==t) t.value=state.title; } else t.textContent=state.title;
+  if (d.tagName==='TEXTAREA'){ if(document.activeElement!==d) d.value=state.desc; } else { d.textContent=state.desc; d.hidden=!state.desc; }
+  document.title = state.title;
+  if (!n){
+    const e=document.createElement('div'); e.className='empty';
+    e.innerHTML = state.admin
+      ? '<strong>아직 올린 사진이 없어요</strong><span>위의 ‘사진 올리기’를 누르거나 사진을 이 창에 끌어다 놓으세요.</span>'
+      : '<strong>아직 올라온 사진이 없어요</strong><span>사진이 올라오면 여기에 나타나요.</span>';
+    g.replaceChildren(e);
+  } else g.replaceChildren(...state.photos.map((p,i) => {
+    const b=document.createElement('button'); b.className='tile'+(state.sel.has(p.id)?' sel':''); b.setAttribute('aria-label',p.name);
+    const im=document.createElement('img'); im.loading='lazy'; im.decoding='async'; im.alt=p.name; im.src=srcThumb(p);
+    b.append(im);
+    if (state.selecting){ const c=document.createElement('span'); c.className='check'; c.textContent=state.sel.has(p.id)?'✓':''; b.append(c); }
+    if (state.admin && state.local[p.id]){ const s=document.createElement('span'); s.className='pending'; s.textContent='방문자 화면 반영 중'; b.append(s); }
+    b.onclick = () => state.selecting ? toggleSel(p.id) : openLb(i);
+    return b;
+  }));
+  const total = state.photos.reduce((s,p)=>s+(p.size||0),0);
+  $('#stats').textContent = n ? `사진 ${n}장 · 원본 합계 ${kb(total)}` : '사진 0장';
+  $('#selectBtn').disabled=!n; $('#selectBtn').textContent = state.selecting?'고르기 끝내기':'여러 장 고르기';
+  $('#selAll').hidden=!state.selecting; $('#dlSel').hidden=!state.selecting; $('#dlSel').disabled=!state.sel.size;
+  $('#dlSel').textContent=`고른 사진 받기 (${state.sel.size})`;
+  $('#delSel').hidden=!(state.selecting&&state.admin); $('#delSel').disabled=!state.sel.size;
+  $('#dlAll').disabled=!n; $('#dlAll').hidden=state.selecting;
+  $('#uploadBtn').hidden=!state.admin; $('#adminBadge').hidden=!state.admin;
+  $('#adminLink').textContent = state.admin ? '관리 끝내기' : '관리';
+}
+function toggleSel(id){ state.sel.has(id)?state.sel.delete(id):state.sel.add(id); render(); }
+$('#selectBtn').onclick = () => { state.selecting=!state.selecting; state.sel.clear(); render(); };
+$('#selAll').onclick = () => { const all=state.sel.size===state.photos.length; state.sel=all?new Set():new Set(state.photos.map(p=>p.id)); render(); };
+
+/* ---------- 크게 보기 ---------- */
+function openLb(i){ state.lbIndex=i; showLb(); $('#lb').hidden=false; $('#lbClose').focus(); }
+function showLb(){
+  const p=state.photos[state.lbIndex]; if(!p){ closeLb(); return; }
+  $('#lbImg').src=srcFull(p); $('#lbImg').alt=p.name; $('#lbName').textContent=p.name;
+  $('#lbMeta').textContent=`${state.lbIndex+1} / ${state.photos.length} · ${p.w}×${p.h}px · ${kb(p.size)}`;
+  $('#lbDel').hidden=!state.admin;
+}
+function closeLb(){ $('#lb').hidden=true; state.lbIndex=-1; }
+function stepLb(d){ const n=state.photos.length; state.lbIndex=(state.lbIndex+d+n)%n; showLb(); }
+$('#lbClose').onclick=closeLb; $('#lbPrev').onclick=()=>stepLb(-1); $('#lbNext').onclick=()=>stepLb(1);
+$('#lb').addEventListener('click', e => { if(e.target.classList.contains('stage')) closeLb(); });
+document.addEventListener('keydown', e => { if($('#lb').hidden) return;
+  if(e.key==='Escape') closeLb(); else if(e.key==='ArrowLeft') stepLb(-1); else if(e.key==='ArrowRight') stepLb(1); });
+let tx=null;
+$('#lb').addEventListener('touchstart', e=>tx=e.touches[0].clientX, {passive:true});
+$('#lb').addEventListener('touchend', e=>{ if(tx==null) return; const dx=e.changedTouches[0].clientX-tx; if(Math.abs(dx)>50) stepLb(dx<0?1:-1); tx=null; });
+
+/* ---------- 내려받기 ---------- */
+async function fetchBlob(p){ const r=await fetch(srcFull(p)); if(!r.ok) throw new Error('사진을 불러오지 못했어요. 잠시 뒤 다시 해 주세요'); return r.blob(); }
+function saveLink(name, blob){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+async function shareFiles(files){
+  try{ if (isMobile && navigator.canShare && navigator.canShare({files})){ await navigator.share({files}); return true; } }
+  catch(e){ if (e.name==='AbortError') return true; }
+  return false;
+}
+async function downloadPhotos(list){
+  if (!list.length) return;
+  try{
+    const blobs=[];
+    for (let i=0;i<list.length;i++){ progress(`사진을 받는 중… ${i+1} / ${list.length}`, i/list.length); blobs.push(await fetchBlob(list[i])); }
+    const names = uniqueNames(list.map(p=>p.name));
+    progress(null);
+    // 휴대폰: 공유 창 → '이미지 저장'으로 사진 앱에 저장 (최대 10장씩)
+    if (isMobile && list.length <= 10){
+      const files = blobs.map((b,i)=>new File([b], names[i], {type:b.type||'image/jpeg'}));
+      if (await shareFiles(files)) return;
+    }
+    if (list.length===1){ saveLink(names[0], blobs[0]); toast('저장했어요'); return; }
+    progress('ZIP 파일을 만드는 중…', 1);
+    const zip=new JSZip(); blobs.forEach((b,i)=>zip.file(names[i], b));
+    const out=await zip.generateAsync({type:'blob'});
+    progress(null);
+    saveLink(`${state.title.replace(/[\\/:*?"<>|]/g,'')}-${list.length}장.zip`, out); toast('ZIP 파일을 저장했어요');
+  }catch(e){ progress(null); toast(e.message||'내려받지 못했어요'); }
+}
+function uniqueNames(names){ const used={}; return names.map(n=>{ if(!used[n]){ used[n]=1; return n; } return n.replace(/(\.[^.]+)?$/, m=>`-${++used[n]}${m}`); }); }
+$('#lbDl').onclick=()=>downloadPhotos([state.photos[state.lbIndex]]);
+$('#dlAll').onclick=()=>downloadPhotos(state.photos);
+$('#dlSel').onclick=()=>downloadPhotos(state.photos.filter(p=>state.sel.has(p.id)));
+
+/* ---------- GitHub 저장소 (관리자) ---------- */
+let token = null;
+const API = `https://api.github.com/repos/${CFG.owner}/${CFG.repo}`;
+async function gh(path, opt={}){
+  const r = await fetch(API+path, {...opt, headers:{Authorization:'Bearer '+token, Accept:'application/vnd.github+json', ...(opt.headers||{})}});
+  if (!r.ok){ const e=new Error(r.status===401?'토큰이 맞지 않거나 만료됐어요':r.status===403||r.status===404?'토큰에 이 저장소 쓰기 권한이 없어요':'GitHub 오류 ('+r.status+')'); e.status=r.status; throw e; }
+  return r.status===204 ? null : r.json();
+}
+const b64 = blob => new Promise((res,rej)=>{ const f=new FileReader(); f.onload=()=>res(f.result.split(',')[1]); f.onerror=rej; f.readAsDataURL(blob); });
+const utf8b64 = s => btoa(unescape(encodeURIComponent(s)));
+async function readManifest(){
+  const r = await fetch(`${API}/contents/photos.json?ref=${CFG.branch}&t=${Date.now()}`, {headers:{Authorization:'Bearer '+token, Accept:'application/vnd.github.raw+json'}, cache:'no-store'});
+  if (!r.ok) throw new Error('사진 목록을 읽지 못했어요 ('+r.status+')');
+  return r.json();
+}
+/* 여러 파일 추가·삭제와 photos.json 수정을 커밋 하나로 */
+async function commit(changes, mutate, message){
+  for (let attempt=0; attempt<3; attempt++){
+    const ref = await gh(`/git/ref/heads/${CFG.branch}`);
+    const base = await gh(`/git/commits/${ref.object.sha}`);
+    const data = await readManifest();
+    mutate(data);
+    const tree = [];
+    for (const c of changes){
+      if (c.content == null){ tree.push({path:c.path, mode:'100644', type:'blob', sha:null}); continue; }
+      if (!c.sha) c.sha = (await gh('/git/blobs',{method:'POST', body:JSON.stringify({content:c.content, encoding:'base64'})})).sha;
+      tree.push({path:c.path, mode:'100644', type:'blob', sha:c.sha});
+    }
+    tree.push({path:'photos.json', mode:'100644', type:'blob', content:JSON.stringify(data, null, 1)});
+    const t = await gh('/git/trees',{method:'POST', body:JSON.stringify({base_tree:base.tree.sha, tree})});
+    const cm = await gh('/git/commits',{method:'POST', body:JSON.stringify({message, tree:t.sha, parents:[ref.object.sha]})});
+    try { await gh(`/git/refs/heads/${CFG.branch}`,{method:'PATCH', body:JSON.stringify({sha:cm.sha})}); return data; }
+    catch(e){ if (e.status!==422) throw e; } // 그 사이 다른 변경이 있으면 다시
+  }
+  throw new Error('저장소가 바쁜 것 같아요. 잠시 뒤 다시 해 주세요');
+}
+
+/* ---------- 올리기 ---------- */
+const OK_TYPES={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'};
+const MAX = 24*1048576;
+function loadImage(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error('열 수 없는 사진 형식이에요')); i.src=src; }); }
+async function toJpeg(img, maxSide, q){
+  let w=img.naturalWidth, h=img.naturalHeight; const s=Math.min(1, maxSide/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s);
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d');
+  x.fillStyle='#fff'; x.fillRect(0,0,w,h); x.imageSmoothingQuality='high'; x.drawImage(img,0,0,w,h);
+  return {blob:await new Promise(r=>c.toBlob(r,'image/jpeg',q)), w, h};
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+async function prepare(file){
+  const src=URL.createObjectURL(file);
+  try{
+    const img=await loadImage(src);
+    let main=file, ext=OK_TYPES[file.type], name=file.name||'사진', w=img.naturalWidth, h=img.naturalHeight;
+    if (!ext || file.size>MAX){ // HEIC 등은 고화질 JPG로
+      let side=Math.max(w,h), r; do{ r=await toJpeg(img, side, .92); side=Math.round(side*.8); }while(r.blob.size>MAX);
+      main=r.blob; w=r.w; h=r.h; ext='jpg'; name=name.replace(/\.[^.]+$/,'')+'.jpg';
+    }
+    const thumb=(await toJpeg(img, 640, .8)).blob;
+    const id=newId();
+    return { entry:{id, name, file:`photos/full/${id}.${ext}`, thumb:`photos/thumb/${id}.jpg`, w, h, size:main.size, createdAt:new Date().toISOString()}, main, thumb };
+  } finally { URL.revokeObjectURL(src); }
+}
+async function uploadFiles(files){
+  if (!state.admin) return;
+  const list=[...files].filter(f=>f.type.startsWith('image/')||/\.(heic|heif)$/i.test(f.name));
+  if (!list.length){ toast('사진 파일만 올릴 수 있어요'); return; }
+  const fails=[];
+  // 10장씩 묶어서 저장 (한 번에 너무 크지 않게)
+  for (let start=0; start<list.length; start+=10){
+    const chunk=list.slice(start, start+10), ready=[], changes=[];
+    for (let i=0;i<chunk.length;i++){
+      const k=start+i;
+      progress(`준비 중… ${k+1} / ${list.length} · ${chunk[i].name}`, k/list.length);
+      try{
+        const p=await prepare(chunk[i]);
+        changes.push({path:p.entry.file, content:await b64(p.main)}, {path:p.entry.thumb, content:await b64(p.thumb)});
+        ready.push(p);
+      }catch(e){ fails.push(`${chunk[i].name}: ${e.message}`); }
+    }
+    if (!ready.length) continue;
+    progress(`GitHub에 저장하는 중… ${Math.min(start+chunk.length,list.length)} / ${list.length}`, (start+chunk.length)/list.length);
+    try{
+      const data = await commit(changes, d=>{ d.photos=(d.photos||[]).concat(ready.map(r=>r.entry)); }, `사진 ${ready.length}장 올림`);
+      for (const r of ready) state.local[r.entry.id]={full:URL.createObjectURL(r.main), thumb:URL.createObjectURL(r.thumb)};
+      applyData(data);
+    }catch(e){ fails.push(...ready.map(r=>`${r.entry.name}: ${e.message}`)); if (e.status===401||e.status===403) break; }
+  }
+  progress(null);
+  $('#note').textContent = fails.length ? '올리지 못한 사진 — '+fails.join(' / ') : '방문자 화면에는 1~2분 뒤에 나타나요.';
+  toast(fails.length ? `${list.length-fails.length}장 올림, ${fails.length}장 실패` : `${list.length}장을 올렸어요`);
+}
+$('#file').onchange = e => { uploadFiles(e.target.files); e.target.value=''; };
+let dragDepth=0;
+document.addEventListener('dragenter', e=>{ if(!state.admin) return; e.preventDefault(); dragDepth++; $('#drop').hidden=false; });
+document.addEventListener('dragover', e=>{ if(state.admin) e.preventDefault(); });
+document.addEventListener('dragleave', ()=>{ if(!state.admin) return; if(--dragDepth<=0){ dragDepth=0; $('#drop').hidden=true; } });
+document.addEventListener('drop', e=>{ if(!state.admin) return; e.preventDefault(); dragDepth=0; $('#drop').hidden=true; uploadFiles(e.dataTransfer.files); });
+
+/* ---------- 삭제 (두 번 눌러 확인) ---------- */
+function armDelete(btn, label, run){
+  if (btn.dataset.armed){ delete btn.dataset.armed; btn.textContent=label; run(); return; }
+  btn.dataset.armed='1'; btn.textContent='한 번 더 누르면 삭제';
+  setTimeout(()=>{ if(btn.dataset.armed){ delete btn.dataset.armed; btn.textContent=label; } },3000);
+}
+async function deletePhotos(list){
+  const ids=new Set(list.map(p=>p.id));
+  progress(`${list.length}장 삭제하는 중…`, .5);
+  try{
+    const changes=list.flatMap(p=>[{path:p.file, content:null},{path:p.thumb, content:null}]);
+    const data=await commit(changes, d=>{ d.photos=(d.photos||[]).filter(p=>!ids.has(p.id)); }, `사진 ${list.length}장 삭제`);
+    state.sel.clear(); applyData(data); toast(`${list.length}장을 삭제했어요`);
+  }catch(e){ toast(e.message); }
+  progress(null);
+}
+$('#lbDel').onclick=()=>armDelete($('#lbDel'),'삭제',()=>deletePhotos([state.photos[state.lbIndex]]));
+$('#delSel').onclick=()=>armDelete($('#delSel'),'선택 삭제',()=>deletePhotos(state.photos.filter(p=>state.sel.has(p.id))));
+
+/* ---------- 앨범 제목·설명 ---------- */
+function makeEditable(on){
+  const t=$('#title'), d=$('#desc');
+  if (on && t.tagName==='H1'){
+    const ti=document.createElement('input'); ti.className='title'; ti.id='title'; ti.setAttribute('aria-label','앨범 제목');
+    const de=document.createElement('textarea'); de.id='desc'; de.rows=2; de.placeholder='앨범 설명 (선택)'; de.setAttribute('aria-label','앨범 설명');
+    t.replaceWith(ti); d.replaceWith(de);
+    const commitMeta = async () => {
+      const title=ti.value.trim()||'사진 공유함', desc=de.value.trim();
+      if (title===state.title && desc===state.desc) return;
+      state.title=title; state.desc=desc;
+      try{ await commit([], x=>{ x.title=title; x.desc=desc; }, '앨범 정보 수정'); toast('앨범 정보를 저장했어요'); }catch(e){ toast(e.message); }
+    };
+    ti.addEventListener('blur', commitMeta); de.addEventListener('blur', commitMeta);
+    ti.addEventListener('keydown', e=>{ if(e.key==='Enter') ti.blur(); });
+  } else if (!on && t.tagName==='INPUT'){
+    const h=document.createElement('h1'); h.id='title'; const p=document.createElement('p'); p.id='desc';
+    t.replaceWith(h); d.replaceWith(p);
+  }
+}
+async function enterAdmin(tok){
+  token=tok;
+  const repo=await gh('');
+  if (!repo.permissions?.push){ token=null; throw new Error('토큰에 이 저장소 쓰기 권한이 없어요'); }
+  state.admin=true; makeEditable(true);
+  applyData(await readManifest());
+}
+function leaveAdmin(){ token=null; state.admin=false; state.selecting=false; makeEditable(false); render(); }
+$('#adminLink').onclick = () => {
+  if (state.admin){ store.set(null); leaveAdmin(); toast('관리자 모드를 끝냈어요. 이 기기에서 토큰을 지웠어요'); return; }
+  $('#adminPanel').hidden=false; $('#tokenIn').focus();
+};
+$('#tokenCancel').onclick = () => { $('#adminPanel').hidden=true; };
+$('#tokenSave').onclick = async () => {
+  const v=$('#tokenIn').value.trim(); if(!v) return;
+  $('#tokenMsg').textContent='확인하는 중…';
+  try{ await enterAdmin(v); store.set(v); $('#tokenIn').value=''; $('#adminPanel').hidden=true; $('#tokenMsg').textContent=''; toast('관리자 모드예요. 사진을 올릴 수 있어요'); }
+  catch(e){ $('#tokenMsg').textContent=e.message; }
+};
+$('#repoName').textContent = `${CFG.owner}/${CFG.repo}`;
+
+/* ---------- 앱 설치 ---------- */
+let installEvt=null;
+addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); installEvt=e; $('#install').hidden=false; });
+$('#install').onclick = async () => { if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; $('#install').hidden=true; };
+if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) $('#installHint').textContent='사파리 공유 버튼 → ‘홈 화면에 추가’를 누르면 앱처럼 쓸 수 있어요.';
+if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) $('#installHint').textContent='';
+if ('serviceWorker' in navigator && location.protocol!=='file:') navigator.serviceWorker.register('sw.js');
+
+/* ---------- 시작 ---------- */
+render();
+(async () => {
+  const saved=store.get();
+  if (saved){ try{ await enterAdmin(saved); return; }catch(e){ store.set(null); token=null; toast(e.message+' — 관리에서 다시 넣어 주세요'); } }
+  await loadPublic();
+})();
+addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && !state.admin) loadPublic(); });
+</script>
+</body>
+</html>
